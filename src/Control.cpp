@@ -14,7 +14,7 @@ Control::Control(int drogue, int main, int armcheck, ControlCallback callback) {
     _main = main;
     _armcheck = armcheck;
     _controlstate = 0;
-    _callback = callback; // Store the callback function
+    _callback = callback;
 }
 
 //Pass the drogue trigger pin, main trigger pin and arming lockout altitude.
@@ -128,7 +128,7 @@ void Control::Deployment (float CurrentAlt, float az) {
   if (_CurrentAlt < 10) {
      _timeout = _timeout + 1;
      }
-  if (_timeout >= 1000) {
+  if (_timeout >= 500) {
      _callback(controlstate); //callback function is called and passed the current state.
      controlstate = 5;
      }

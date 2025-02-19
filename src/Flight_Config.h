@@ -9,8 +9,9 @@
 #define batterytime 3000
 #define bmprate 20 //time in ms between reading bmp sensor. Allows IMU and BMP to read and log at different rates.
 #define gpsUpdateInterval 1000 // gps check rate
-#define transmitrate 5000
+#define transmitrate 15000
 #define LEDduration 100 //how long in ms for the LED to stay on for when it flashes during logging
 //#define datadebugging //option to output sensor readings to serial monitor while logging. uncomment to activate
+#define mute //uncomment to turn off logging heartbeat tone
 
 #endif

@@ -46,6 +46,7 @@ bool GPSlock = true;
 int logNumber = 0; //file numbering
 int msgID = 1000;
 int logtime = 4; //set a minimum logging interval in ms.
+const uint8_t rowMarker[4] = {0xFF, 0xFE, 0xFD, 0xFC};  // Unique row marker
 String dataToSend = "";
 String msgstring = "";
 String latstring = "";
@@ -98,7 +99,7 @@ void setup() {
   delay(2000);
   screen.fill_screen(clrBLACK);
   screen.write_str(0, 0, "Running setup", Font_7x10, clrGREEN, clrBLACK);
-  delay(300);
+  delay(200);
 
 /****************************************/
 /* Battery monitoring setup
@@ -115,7 +116,7 @@ void setup() {
   ControlInstance.SetSafetyLock(20);
   ControlInstance.SetMainAltitude(mainalti);
   digitalWrite(LEDpin, LOW); // onboard LED Off
-  delay(300);
+  delay(100);
 
 /****************************************/
 /* Start GPS
@@ -126,10 +127,10 @@ void setup() {
   UC6580.AutoConfig();
   pinMode(VGNSS_CTRL, OUTPUT);
   digitalWrite(VGNSS_CTRL, HIGH);
-  delay(200);
+  delay(150);
   digitalWrite(LEDpin, LOW); // onboard LED Off
   screen.write_str(105, 15, " OK!", Font_7x10, clrGREEN, clrBLACK);
-  delay(100);
+  delay(75);
 
 /****************************************/
 /* Start LoRa module
@@ -167,18 +168,17 @@ void setup() {
       bmp.getMeasurements(temperature, pressure, altitude); //take a few measurements to get a stable reading
       delay(40);
       }
-  altioffset = altitude; //Set an offest for height above ground. There's a better way to do this probably.
+  altioffset = round(altitude * 100) / 100; //Set an offest for height above ground. There's a better way to do this probably.
   Debug.debugBMP(3, altioffset);
   digitalWrite(LEDpin, LOW); // onboard LED Off
   screen.write_str(105, 39, " OK!", Font_7x10, clrGREEN, clrBLACK);
-  delay(100);
+  delay(75);
 
 /****************************************/
 /* Start low range IMU
- * Start high range accelerometer
 /****************************************/
   digitalWrite(LEDpin, HIGH); // onboard LED on
-  screen.write_str(0, 52, "Starting IMUs...", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 52, "Starting IMU...", Font_7x10, clrGREEN, clrBLACK);
   if (!icm.begin_I2C(0x68, &SensorWire)) { //ICM library is passed I2C address and alternate bus object
      Debug.debugACC(1);
      Buzz.error();
@@ -186,22 +186,30 @@ void setup() {
      screen.write_str(105, 52, " ERROR!", Font_7x10, clrRED, clrBLACK);
      while(1); //don't proceed if there's an error
      }
+  icm.setAccelRateDivisor(1);
   icm.setAccelRange(ICM20948_ACCEL_RANGE_16_G);
   icm.setGyroRange(ICM20948_GYRO_RANGE_2000_DPS);
   icm.setMagDataRate(AK09916_MAG_DATARATE_100_HZ);
+  digitalWrite(LEDpin, LOW); // onboard LED Off
+  screen.write_str(105, 52, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  delay(75);
 
-  if(!adxl.begin()) {
+/****************************************/
+/* Start high range accelerometer
+/****************************************/
+digitalWrite(LEDpin, HIGH); // onboard LED on
+screen.write_str(0, 64, "Starting ACC...", Font_7x10, clrGREEN, clrBLACK);
+if(!adxl.begin()) {
      Debug.debugACC(1);
      Buzz.error();
      digitalWrite(LEDpin, LOW); // onboard LED off
-     screen.write_str(105, 52, " ERROR!", Font_7x10, clrRED, clrBLACK);
+     screen.write_str(105, 64, " ERROR!", Font_7x10, clrRED, clrBLACK);
      while(1); //don't proceed if there's an error
      }
   Debug.debugACC(2);
-  delay(200);
   digitalWrite(LEDpin, LOW); // onboard LED off
-  screen.write_str(105, 52, " OK!", Font_7x10, clrGREEN, clrBLACK);
-  delay(100);
+  screen.write_str(105, 64, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  delay(75);
 
 /****************************************/
 /* Start SD
@@ -209,13 +217,15 @@ void setup() {
  * Create new file with unique number
  * Print header to the file
 /****************************************/
+  screen.fill_screen(clrBLACK);
+  screen.write_str(0, 0, "Running setup", Font_7x10, clrGREEN, clrBLACK);  
   digitalWrite(LEDpin, HIGH); // onboard LED on
-  screen.write_str(0, 64, "Starting SD....", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 15, "Starting SD....", Font_7x10, clrGREEN, clrBLACK);
   if (!SD.begin(SD_CONFIG)) {
      Debug.debugSD(1);
      Buzz.error();
      digitalWrite(LEDpin, LOW); // onboard LED off
-     screen.write_str(105, 64, " ERROR!", Font_7x10, clrRED, clrBLACK);
+     screen.write_str(105, 15, " ERROR!", Font_7x10, clrRED, clrBLACK);
      //while (1); //Stopper. Won't continue without the SD card.
      }
   #define COMMA logfile.print(",");
@@ -227,14 +237,30 @@ void setup() {
   logfile.open(filename, O_WRITE | O_CREAT);
   delay(250); // Issues seem to happen without this short delay.
   logfile.println("~ HELTEC LOGGER v1.0 ~");
-  logfile.println("~ Last compiled: 29-01-25 ~");
+  logfile.println("~ Last compiled: 16-02-25 ~");
   logfile.println();
   logfile.println("ms,ax,ay,az,gx,gy,gz,mx,my,mz,hrax,hray,hraz,pres,alt,rel. alt,GPSalt,lat,long,");
   logfile.sync();
   Debug.debugSD(2);
   digitalWrite(LEDpin, LOW); // onboard LED off
-  screen.write_str(105, 64, " OK!", Font_7x10, clrGREEN, clrBLACK);
-  delay(1000);
+  screen.write_str(105, 15, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  delay(75);
+  
+/****************************************/
+/* Check battery
+ * Display a battery reading for a second or so
+/****************************************/
+  int rawADC = analogRead(1);
+  int bat = (rawADC / 4.095 * 3.3 * ADC_MULTIPLIER);  
+  screen.write_str(0, 27, "vbat = ", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(49, 27, (String)bat, Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(77, 27, "mV", Font_7x10, clrGREEN, clrBLACK);
+  for (int i = 0; i <= 30; i++) {
+      delay(100);   
+      int rawADC = analogRead(1);
+      int bat = (rawADC / 4.095 * 3.3 * ADC_MULTIPLIER);
+      screen.write_str(49, 27, (String)bat, Font_7x10, clrGREEN, clrBLACK);
+      } 
 
 /****************************************/
 /* Indicate setup is done
@@ -244,10 +270,11 @@ void setup() {
   Buzz.success();
   screen.fill_screen(clrBLACK);
   screen.write_str(20, 0, "Setup success!", Font_7x10, clrGREEN, clrBLACK);
-  delay(1000);
+  delay(1500);
   screen.fill_screen(clrBLACK);
   digitalWrite(LEDpin, LOW); // onboard LED off
-  delay(1000);
+  digitalWrite(TFTpin, LOW); //turn off the screen to save power
+  delay(2000);
   xTaskCreatePinnedToCore(commsTask, "Comms Task", 8192, NULL, 10, &commsTaskHandle, 0);
   xTaskCreatePinnedToCore(loggingTask, "Logging Task", 8192, NULL, 10, &loggingTaskHandle, 1);
 }
@@ -269,24 +296,26 @@ void readsensors (void) {
   timer = millis();
   sensors_event_t a, g, temp, m;
   icm.getEvent(&a, &g, &temp, &m);
-  ax = a.acceleration.x + 0;
-  ay = a.acceleration.y + 0;
-  az = a.acceleration.z + 0;
-  gx = g.gyro.x + 0;
-  gy = g.gyro.y + 0;
-  gz = g.gyro.z + 0;
-  mx = m.magnetic.x + 0;
-  my = m.magnetic.y + 0;
-  mz = m.magnetic.z + 0;
+  ax = (round(a.acceleration.x * 100) / 100) - 0.19;
+  ay = (round(a.acceleration.y * 100) / 100) + 0.04;
+  az = (round(a.acceleration.z * 100) / 100) + 0.01;
+  gx = (round(g.gyro.x * 100) / 100) + 0;
+  gy = (round(g.gyro.y * 100) / 100) + 0.01;
+  gz = (round(g.gyro.z * 100) / 100) + 0;
+  mx = (round(m.magnetic.x * 100) / 100) + 0;
+  my = (round(m.magnetic.y * 100) / 100) + 0;
+  mz = (round(m.magnetic.z * 100) / 100) + 0;
 
   sensors_event_t event;
   adxl.getEvent(&event);
-  hrax = event.acceleration.x;
-  hray = event.acceleration.y;
-  hraz = event.acceleration.z;
+  hrax = (round(event.acceleration.x * 100) / 100) - 11.57;
+  hray = (round(event.acceleration.y * 100) / 100) - 11.94;
+  hraz = (round(event.acceleration.z * 100) / 100) + 4.32;
 
   if (bmp.getMeasurements(temperature, pressure, altitude)){
-     correctedalt = altitude - altioffset;
+   pressure = round(pressure * 100) / 100; 
+   altitude = round(altitude *100) / 100;   
+   correctedalt = altitude - altioffset;
      ControlInstance.Deployment(correctedalt, az); //although not currently implemented in the ControlInstance library, function it set up to accept it so that it can be implemented in future, e.g detecting lift-off, recording maxx acceleration during boost, etc
      bmpready = true; //sets flag to say that there is some baro data to be written
      }
@@ -318,6 +347,16 @@ void endlog (void) {
   logfile.sync();
   logfile.close();
   digitalWrite(LEDpin, HIGH); //onboard LED on
+  digitalWrite(TFTpin, HIGH); //turn off the screen to save power
+  screen.write_str(0, 0, "Flight summary:", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 15, "max alt:", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(63, 15, (String)ControlInstance.maxalt, Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 15, "m", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 27, "at time:", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(63, 27, (String)(ControlInstance.apogeetime / 1000), Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 27, "sec", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 39, "max z:", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(63, 39, "not logged", Font_7x10, clrGREEN, clrBLACK);
   while(1) {
            Buzz.ended(); //ending tone
            }
@@ -337,13 +376,7 @@ void events (int state) {
     default: break; //nothing to do here for states 4 and 5.
     }
 }
-void batterylevel() {
-  int rawADC = analogRead(1);
-  int bat = (rawADC / 4.095 * 3.3 * ADC_MULTIPLIER);
-  screen.write_str(0, 39, "vbat = ", Font_7x10, clrRED, clrBLACK);
-  screen.write_str(49, 39, (String)bat, Font_7x10, clrRED, clrBLACK);
-  screen.write_str(77, 39, "mV", Font_7x10, clrRED, clrBLACK);
-}
+
 /****************************************/
 /* Run through the sensor reads and deployment checks
 
@@ -355,7 +388,6 @@ void batterylevel() {
 /****************************************/
 void loggingTask(void *parameter) {
   for (;;) {
-      vTaskDelay(pdMS_TO_TICKS(2));
       if (millis() - timer >= logtime){
          readsensors();
          logfile.println();
@@ -384,13 +416,11 @@ void loggingTask(void *parameter) {
                COMMA;
                logfile.print(lastLatitude); COMMA;
                logfile.print(lastLongitude); COMMA;
-               logfile.print(satsfound);
                GPSready = false; //set the flag back until the next GPS data is collected
                }
-            #ifdef datadebugging
+            #ifdef datadebugging //Serial data printed only if the option was defined
             Debug.debugdata(timer, pressure, altitude, correctedalt, ax, ay, az, gx, gy, gz, mx, my, mz, ControlInstance.controlstate);
             #endif
-            //Serial data printed only if the option was defined
             }
 
 
@@ -402,6 +432,7 @@ void loggingTask(void *parameter) {
             LEDstate = true;
             flushclock = timer;
             LEDtimer = timer;
+            
             //end of flight timeout
             if (ControlInstance.controlstate == 5){
                endlog();
@@ -415,6 +446,7 @@ void loggingTask(void *parameter) {
            LEDstate = false;
            }
          }
+      vTaskDelay(pdMS_TO_TICKS(1));
       }
 }
 
@@ -424,49 +456,44 @@ void loggingTask(void *parameter) {
 /****************************************/
 void commsTask(void *parameter) {
   for (;;) {
-      if (millis() - batteryclock >= batterytime){
-         batterylevel();
-         batteryclock = millis();
-         }
-
       //If there's GPS data, read it
       while (Serial1.available() > 0) {
          GPS.encode(Serial1.read());
          }
 
       if ((millis() - lastGPSUpdate >= gpsUpdateInterval) && GPS.location.isValid()) {
-         //Convert to strings
-         //This section currently just puts the GPS data in strings every time the GPS is checked.
-         //No need to do that when the location is only transmitted once every 5 seconds.
-         //However, these could be put in to variables for use in other ways.
          msgstring = String(msgID);
-         latstring = String (GPS.location.lat(), 5);
-         longstring = String (GPS.location.lng(), 5);
+         latstring = String (GPS.location.lat(), 6);
+         longstring = String (GPS.location.lng(), 6);
          altstring = String(GPS.altitude.meters(), 1);
          dataToSend = "MSG" + msgstring + ",LT" + latstring + ",LG" + longstring + ",AL" + altstring;
          msgID++;
-         if (!GPSlock) {
-            GPSlock = true;
-            screen.write_str(27, 0, "GPS locked    ", Font_7x10, clrGREEN, clrBLACK);
-            }
          lastGPSUpdate = millis();
          }
-         else if ((millis() - lastGPSUpdate >= gpsUpdateInterval) && !GPS.location.isValid()){
+         else if ((millis() - lastGPSUpdate >= gpsUpdateInterval) && !GPS.location.isValid()){ //This allows the message ID for the LoRa string to be updated but keeps the last valid location, this way the receiver can see if it's still transmitting without losing last known location.
                  msgstring = String(msgID);
                  dataToSend = "MSG" + msgstring + ",LT" + latstring + ",LG" + longstring + ",AL" + altstring;
                  msgID++;
-                 if (GPSlock) {
-                    GPSlock = false;
-                    screen.write_str(27, 0, "GPS not locked", Font_7x10, clrRED, clrBLACK);
-                    }
                  lastGPSUpdate = millis();
                  }
       vTaskDelay(pdMS_TO_TICKS(10));
 
       //transmit location
       if (millis() - radiotimer >= transmitrate) {
-         radio.transmit(dataToSend);
+         //Serial.print("send start: ");
+         //Serial.println(millis());
+         radio.standby();
+         int state = radio.transmit(dataToSend);
+         if (state == RADIOLIB_ERR_NONE) {
+            Serial.println("Transmission successful!");
+            } else {
+              Serial.print("Transmission failed: ");
+              Serial.println(state);
+              }
+         radio.sleep();
          radiotimer = millis();
+         //Serial.print("send end: ");
+         //Serial.println(millis());
          }
       }
       

@@ -15,6 +15,9 @@
 //Onboard LED
 #define LEDpin                 18
 
+//Onboard TFT backlight pin
+#define TFTpin                 21
+
 //GPS pins amd baud rate
 #define VGNSS_CTRL             3 
 #define GNSS_RX                33
@@ -23,7 +26,7 @@
 #define GNSS_PPS               36
 #define GNSS_BAUD              115200
 
-//LoRa config
+//LoRa pins
 #define LORA_CS                8
 #define LORA_SCK               9
 #define LORA_MOSI              10
@@ -33,6 +36,8 @@
 #define LORA_DIO1              14    // SX1262 IRQ
 #define LORA_DIO2              13    // SX1262 BUSY
 #define LORA_DIO3                    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+
+//LoRa config
 #define LORA_SYNC              0x34       
 #define LORA_BAND              915.0 // Adjust to your region (e.g., 433E6, 868E6, or 915E6)
 #define TX_OUTPUT_POWER        5     // dBm
@@ -42,7 +47,7 @@
 #define LORA_PREAMBLE          8       
 #define LORA_CODING_RATE       5     // [1: 4/5, 2: 4/6, 3: 4/7, 4: 4/8]
 #define RX_TIMEOUT_VALUE       1000
-#define BUFFER_SIZE            30 
+#define BUFFER_SIZE            64 
 #define BOARD_TCXO_WAKEUP_TIME 5
 
 //SD config

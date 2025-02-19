@@ -19,28 +19,28 @@ void UCCONFIG::AutoConfig()
   //  Serial.write(c);
   //}
   Serial1.write("$CFGSYS,h35155\r\n");
-  delay(750);
+  delay(500);
   // Disable  messages
   Serial1.write("$CFGMSG,0,0,1\r\n");   // Enable GGA
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,1,0\r\n");   // Disable GLL
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,2,0\r\n");   // Disable GSA
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,3,0\r\n");   // Disable GSV
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,4,0\r\n");   // Disable RMC
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,5,0\r\n");   // Disable VTG
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,6,0\r\n");   // Disable ZDA
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,7,0\r\n");   // Disable GST
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,0,8,0\r\n");   // Disable GBS
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,6,0,0\r\n");
-  delay(250);
+  delay(100);
   Serial1.write("$CFGMSG,6,1,0\r\n");
-  delay(250);
+  delay(100);
 }

@@ -2,21 +2,20 @@
 #include <SdFat.h> //SdFat library writes way faster than the standard SD library, but it's more complicated
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_Sensor.h> //wtf does this one even do, idk.
+#include <Adafruit_Sensor.h> //wtf does this one even do idk.
 #include <Adafruit_ADXL375.h>
 #include <Adafruit_ICM20X.h>
 #include <Adafruit_ICM20948.h>
 #include <BMP388_DEV.h>
 #include <TinyGPS++.h> //for built-in UC6580 GNSS on the Heltec Wireless Tracker
 #include <RadioLib.h>
-#include "HT_st7735.h" //for built-in TFT screen on the Heltec Wireless Tracker
 #include "Buzzer.h" //buzzer tone functions - this was first built for aruduino Nano boards, could be updated for ESP32.
-#include "Serial_Debug.h" //Serial monitor debugging messages
 #include "Control.h" //deployment logic etc.
-#include "Hardware_Config.h"
-#include "Flight_Config.h"
-#include "UC6580_Config.h"
-//#include "UC6580_Config.h" //Library forconfiguring the GPS sentences and output rates etc. Not finished yet, few things to work through yet,
+#include "TFT/TFTscreen.h" //for built-in TFT screen on the Heltec Wireless Tracker
+#include "Config/Serial_Debug.h" //Serial monitor debugging messages
+#include "Config/Hardware_Config.h"
+#include "Config/Flight_Config.h"
+#include "Config/UC6580_Config.h" //Library for configuring the GPS sentences and output rates etc. Not finished yet, few things to work through yet,
 
 //SD pins
 const uint8_t SD_CS_PIN = 46;
@@ -35,6 +34,7 @@ float lastLongitude = 0.0;
 float GPSalt = 0.0;
 float satsfound = 0.0;
 unsigned long lastGPSUpdate = 0;
+unsigned long buttonPressTime = 0; // Track button press duration
 byte droguecount = 0;
 byte maincount = 0;
 byte logtimeout = 0;
@@ -43,6 +43,7 @@ bool bmpready = false; //flag for barometer data collected
 bool GPSready = false;
 bool LEDstate = false; //flag for onboard LED on or off
 bool GPSlock = true;
+bool screenstate = true;
 int logNumber = 0; //file numbering
 int msgID = 1000;
 int logtime = 4; //set a minimum logging interval in ms.
@@ -61,11 +62,11 @@ void events(int state);
 //The rest
 TaskHandle_t commsTaskHandle = NULL;
 TaskHandle_t loggingTaskHandle = NULL;
-TwoWire SensorWire = TwoWire(0); //since the Heltec Wireless Tracker usus the hardware I2c pins for onboard TFT screen, need to set up alternate I2c bus
+TwoWire SensorWire = TwoWire(0); //I2c bus for the sensors
 BMP388_DEV bmp(7, 6, SensorWire); //BMP library is passed alternate I2C pins and bus object
 Adafruit_ADXL375 adxl = Adafruit_ADXL375(0x53, &SensorWire);
 Adafruit_ICM20948 icm;
-HT_st7735 screen;
+TFTscreen screen;
 TinyGPSPlus GPS;
 SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RESET, LORA_DIO2);
 SdFat SD;
@@ -82,23 +83,23 @@ void setup() {
 /****************************************/
   pinMode(LEDpin, OUTPUT);
   SensorWire.begin(I2C_SDA, I2C_SCL, 400000); //start alternate I2C bus
-  screen.st7735_init(); //start screen
-  screen.fill_screen(clrBLACK);
+  screen.TFT_init(); //start screen
+  screen.fill_screen(BLACK);
   digitalWrite(LEDpin, HIGH); // onboard LED on
   Buzz.startup();
-  for(int x = 0; x < scrWIDTH; x++) {
-     screen.draw_pixel(x, 0, clrRED);
-     screen.draw_pixel(x, scrHEIGHT-1, clrRED);
+  for(int x = 0; x < TFTWIDTH; x++) {
+     screen.draw_pixel(x, 0, RED);
+     screen.draw_pixel(x, TFTHEIGHT-1, RED);
      }
-  for(int y = 0; y < scrHEIGHT; y++) {
-     screen.draw_pixel(0, y, clrRED);
-     screen.draw_pixel(scrWIDTH-1, y, clrRED);
+  for(int y = 0; y < TFTHEIGHT; y++) {
+     screen.draw_pixel(0, y, RED);
+     screen.draw_pixel(TFTWIDTH-1, y, RED);
      }
-  screen.write_str(50, 22, "ROLLEY", Font_11x18, clrRED, clrBLACK);
-  screen.write_str(35, 47, "ROCKETRY", Font_11x18, clrRED, clrBLACK);
+  screen.write_str(50, 22, "ROLLEY", Font_Medium, RED, BLACK);
+  screen.write_str(35, 47, "ROCKETRY", Font_Medium, RED, BLACK);
   delay(2000);
-  screen.fill_screen(clrBLACK);
-  screen.write_str(0, 0, "Running setup", Font_7x10, clrGREEN, clrBLACK);
+  screen.fill_screen(BLACK);
+  screen.write_str(0, 0, "Running setup", Font_Small, GREEN, BLACK);
   delay(200);
 
 /****************************************/
@@ -122,27 +123,27 @@ void setup() {
 /* Start GPS
 /****************************************/
   digitalWrite(LEDpin, HIGH); // onboard LED on
-  screen.write_str(0, 15, "Starting GPS...", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 15, "Starting GPS...", Font_Small, GREEN, BLACK);
   Serial1.begin(GNSS_BAUD, SERIAL_8N1, GNSS_RX, GNSS_TX);
   UC6580.AutoConfig();
   pinMode(VGNSS_CTRL, OUTPUT);
   digitalWrite(VGNSS_CTRL, HIGH);
   delay(150);
   digitalWrite(LEDpin, LOW); // onboard LED Off
-  screen.write_str(105, 15, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 15, " OK!", Font_Small, GREEN, BLACK);
   delay(75);
 
 /****************************************/
 /* Start LoRa module
 /****************************************/
-  screen.write_str(0, 27, "Starting LoRa...", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 27, "Starting LoRa...", Font_Small, GREEN, BLACK);
   int state = radio.begin(LORA_BAND, LORA_BANDWIDTH, LORA_SPREAD_FACTOR, LORA_CODING_RATE, LORA_SYNC, TX_OUTPUT_POWER, LORA_PREAMBLE, TX_VOLTAGE, false);
   if (state == RADIOLIB_ERR_NONE) {
-      screen.write_str(105, 27, " OK!", Font_7x10, clrGREEN, clrBLACK);
+      screen.write_str(105, 27, " OK!", Font_Small, GREEN, BLACK);
       } else {
              Buzz.error();
              digitalWrite(LEDpin, LOW); // onboard LED off
-             screen.write_str(105, 27, " ERROR!", Font_7x10, clrRED, clrBLACK);
+             screen.write_str(105, 27, " ERROR!", Font_Small, RED, BLACK);
              while (1);
              }
 
@@ -150,13 +151,13 @@ void setup() {
 /* Start BMP388
 /****************************************/
   digitalWrite(LEDpin, HIGH); // onboard LED on
-  screen.write_str(0, 39, "Starting BMP...", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 39, "Starting BMP...", Font_Small, GREEN, BLACK);
   int rslt;
   if (!bmp.begin(BMP388_I2C_ALT_ADDR)) { //the BMP388 on the GY-912 breakout board uses alternate IIC address
      Debug.debugBMP(1, 0);
      Buzz.error();
      digitalWrite(LEDpin, LOW); // onboard LED off
-     screen.write_str(105, 39, " ERROR!", Font_7x10, clrRED, clrBLACK);
+     screen.write_str(105, 39, " ERROR!", Font_Small, RED, BLACK);
     // while(1); //don't proceed if there's an error
      }
   bmp.setPresOversampling(OVERSAMPLING_X4);
@@ -171,19 +172,19 @@ void setup() {
   altioffset = round(altitude * 100) / 100; //Set an offest for height above ground. There's a better way to do this probably.
   Debug.debugBMP(3, altioffset);
   digitalWrite(LEDpin, LOW); // onboard LED Off
-  screen.write_str(105, 39, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 39, " OK!", Font_Small, GREEN, BLACK);
   delay(75);
 
 /****************************************/
 /* Start low range IMU
 /****************************************/
   digitalWrite(LEDpin, HIGH); // onboard LED on
-  screen.write_str(0, 52, "Starting IMU...", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 52, "Starting IMU...", Font_Small, GREEN, BLACK);
   if (!icm.begin_I2C(0x68, &SensorWire)) { //ICM library is passed I2C address and alternate bus object
      Debug.debugACC(1);
      Buzz.error();
      digitalWrite(LEDpin, LOW); // onboard LED off
-     screen.write_str(105, 52, " ERROR!", Font_7x10, clrRED, clrBLACK);
+     screen.write_str(105, 52, " ERROR!", Font_Small, RED, BLACK);
      while(1); //don't proceed if there's an error
      }
   icm.setAccelRateDivisor(1);
@@ -191,24 +192,24 @@ void setup() {
   icm.setGyroRange(ICM20948_GYRO_RANGE_2000_DPS);
   icm.setMagDataRate(AK09916_MAG_DATARATE_100_HZ);
   digitalWrite(LEDpin, LOW); // onboard LED Off
-  screen.write_str(105, 52, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 52, " OK!", Font_Small, GREEN, BLACK);
   delay(75);
 
 /****************************************/
 /* Start high range accelerometer
 /****************************************/
 digitalWrite(LEDpin, HIGH); // onboard LED on
-screen.write_str(0, 64, "Starting ACC...", Font_7x10, clrGREEN, clrBLACK);
+screen.write_str(0, 64, "Starting ACC...", Font_Small, GREEN, BLACK);
 if(!adxl.begin()) {
      Debug.debugACC(1);
      Buzz.error();
      digitalWrite(LEDpin, LOW); // onboard LED off
-     screen.write_str(105, 64, " ERROR!", Font_7x10, clrRED, clrBLACK);
+     screen.write_str(105, 64, " ERROR!", Font_Small, RED, BLACK);
      while(1); //don't proceed if there's an error
      }
   Debug.debugACC(2);
   digitalWrite(LEDpin, LOW); // onboard LED off
-  screen.write_str(105, 64, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 64, " OK!", Font_Small, GREEN, BLACK);
   delay(75);
 
 /****************************************/
@@ -217,15 +218,15 @@ if(!adxl.begin()) {
  * Create new file with unique number
  * Print header to the file
 /****************************************/
-  screen.fill_screen(clrBLACK);
-  screen.write_str(0, 0, "Running setup", Font_7x10, clrGREEN, clrBLACK);  
+  screen.fill_screen(BLACK);
+  screen.write_str(0, 0, "Running setup", Font_Small, GREEN, BLACK);  
   digitalWrite(LEDpin, HIGH); // onboard LED on
-  screen.write_str(0, 15, "Starting SD....", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 15, "Starting SD....", Font_Small, GREEN, BLACK);
   if (!SD.begin(SD_CONFIG)) {
      Debug.debugSD(1);
      Buzz.error();
      digitalWrite(LEDpin, LOW); // onboard LED off
-     screen.write_str(105, 15, " ERROR!", Font_7x10, clrRED, clrBLACK);
+     screen.write_str(105, 15, " ERROR!", Font_Small, RED, BLACK);
      //while (1); //Stopper. Won't continue without the SD card.
      }
   #define COMMA logfile.print(",");
@@ -237,13 +238,13 @@ if(!adxl.begin()) {
   logfile.open(filename, O_WRITE | O_CREAT);
   delay(250); // Issues seem to happen without this short delay.
   logfile.println("~ HELTEC LOGGER v1.0 ~");
-  logfile.println("~ Last compiled: 16-02-25 ~");
+  logfile.println("~ Last compiled: 21-02-25 ~");
   logfile.println();
   logfile.println("ms,ax,ay,az,gx,gy,gz,mx,my,mz,hrax,hray,hraz,pres,alt,rel. alt,GPSalt,lat,long,");
   logfile.sync();
   Debug.debugSD(2);
   digitalWrite(LEDpin, LOW); // onboard LED off
-  screen.write_str(105, 15, " OK!", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(105, 15, " OK!", Font_Small, GREEN, BLACK);
   delay(75);
   
 /****************************************/
@@ -252,14 +253,14 @@ if(!adxl.begin()) {
 /****************************************/
   int rawADC = analogRead(1);
   int bat = (rawADC / 4.095 * 3.3 * ADC_MULTIPLIER);  
-  screen.write_str(0, 27, "vbat = ", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(49, 27, (String)bat, Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(77, 27, "mV", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 27, "vbat = ", Font_Small, GREEN, BLACK);
+  screen.write_str(49, 27, (String)bat, Font_Small, GREEN, BLACK);
+  screen.write_str(77, 27, "mV", Font_Small, GREEN, BLACK);
   for (int i = 0; i <= 30; i++) {
       delay(100);   
       int rawADC = analogRead(1);
       int bat = (rawADC / 4.095 * 3.3 * ADC_MULTIPLIER);
-      screen.write_str(49, 27, (String)bat, Font_7x10, clrGREEN, clrBLACK);
+      screen.write_str(49, 27, (String)bat, Font_Small, GREEN, BLACK);
       } 
 
 /****************************************/
@@ -268,12 +269,13 @@ if(!adxl.begin()) {
 /****************************************/
   digitalWrite(LEDpin, HIGH); // onboard LED on
   Buzz.success();
-  screen.fill_screen(clrBLACK);
-  screen.write_str(20, 0, "Setup success!", Font_7x10, clrGREEN, clrBLACK);
+  screen.fill_screen(BLACK);
+  screen.write_str(20, 0, "Setup success!", Font_Small, GREEN, BLACK);
   delay(1500);
-  screen.fill_screen(clrBLACK);
+  screen.fill_screen(BLACK);
   digitalWrite(LEDpin, LOW); // onboard LED off
   digitalWrite(TFTpin, LOW); //turn off the screen to save power
+  screenstate = false;
   delay(2000);
   xTaskCreatePinnedToCore(commsTask, "Comms Task", 8192, NULL, 10, &commsTaskHandle, 0);
   xTaskCreatePinnedToCore(loggingTask, "Logging Task", 8192, NULL, 10, &loggingTaskHandle, 1);
@@ -348,15 +350,15 @@ void endlog (void) {
   logfile.close();
   digitalWrite(LEDpin, HIGH); //onboard LED on
   digitalWrite(TFTpin, HIGH); //turn off the screen to save power
-  screen.write_str(0, 0, "Flight summary:", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(0, 15, "max alt:", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(63, 15, (String)ControlInstance.maxalt, Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(105, 15, "m", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(0, 27, "at time:", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(63, 27, (String)(ControlInstance.apogeetime / 1000), Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(105, 27, "sec", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(0, 39, "max z:", Font_7x10, clrGREEN, clrBLACK);
-  screen.write_str(63, 39, "not logged", Font_7x10, clrGREEN, clrBLACK);
+  screen.write_str(0, 0, "Flight summary:", Font_Small, GREEN, BLACK);
+  screen.write_str(0, 15, "max alt:", Font_Small, GREEN, BLACK);
+  screen.write_str(63, 15, (String)ControlInstance.maxalt, Font_Small, GREEN, BLACK);
+  screen.write_str(105, 15, "m", Font_Small, GREEN, BLACK);
+  screen.write_str(0, 27, "at time:", Font_Small, GREEN, BLACK);
+  screen.write_str(63, 27, (String)(ControlInstance.apogeetime / 1000), Font_Small, GREEN, BLACK);
+  screen.write_str(105, 27, "sec", Font_Small, GREEN, BLACK);
+  screen.write_str(0, 39, "max z:", Font_Small, GREEN, BLACK);
+  screen.write_str(63, 39, "not logged", Font_Small, GREEN, BLACK);
   while(1) {
            Buzz.ended(); //ending tone
            }
@@ -375,6 +377,29 @@ void events (int state) {
     case 3: COMMA; logfile.println("disarmed"); logfile.sync(); break;
     default: break; //nothing to do here for states 4 and 5.
     }
+}
+
+/****************************************/
+/* Function for screen toggle
+ * Work in progress
+ * Turns the screen on and off by holding the user button.
+/****************************************/
+void screencontrol() {
+  if (digitalRead(BOOT_BUTTON) == LOW) {
+     if (buttonPressTime == 0) {
+        buttonPressTime = millis();
+        }
+     // Check if button has been held long enough
+     if (millis() - buttonPressTime >= HoldDuration && screenstate) {
+        digitalWrite(TFTpin, LOW); //turn off the screen to save power
+        screenstate = false;
+        } else if (millis() - buttonPressTime >= HoldDuration && !screenstate) {
+                  digitalWrite(TFTpin, HIGH); //turn off the screen to save power
+                  screenstate = true;
+                  }
+  } else {
+         buttonPressTime = 0; // Reset if button is released
+         }
 }
 
 /****************************************/
@@ -456,6 +481,7 @@ void loggingTask(void *parameter) {
 /****************************************/
 void commsTask(void *parameter) {
   for (;;) {
+      screencontrol(); //Let this run before the rest    
       //If there's GPS data, read it
       while (Serial1.available() > 0) {
          GPS.encode(Serial1.read());

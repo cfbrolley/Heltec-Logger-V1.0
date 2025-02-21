@@ -12,6 +12,9 @@
 #define droguepin              4     //pin for triggering drogue pyro channel
 #define mainpin                5     //pin for triggering main pyro channel
 
+#define BOOT_BUTTON            0
+#define HoldDuration           2000
+
 //Onboard LED
 #define LEDpin                 18
 
@@ -51,7 +54,7 @@
 #define BOARD_TCXO_WAKEUP_TIME 5
 
 //SD config
-#define SD_FAT_TYPE 0 //SPI_DRIVER_SELECT must be changed to 2 in SdFatConfig.h to specify SPI pins - see SoftwareSpi example from SdFat
+#define SD_FAT_TYPE 0
 #define SD_CONFIG SdSpiConfig(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(0), &softSpi) //dedicated use of SPI bus for SdFat allows better performance by using very large multi-block transfers to and from the SD card
 
 //Required for reading battery voltage

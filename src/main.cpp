@@ -1,33 +1,11 @@
 //Libraries
-#include <SdFat.h> //SdFat library writes way faster than the standard SD library, but it's more complicated
-#include <Wire.h>
-#include <SPI.h>
-#include <Adafruit_Sensor.h> //wtf does this one even do idk.
-#include <Adafruit_ADXL375.h>
-#include <Adafruit_ICM20X.h>
-#include <Adafruit_ICM20948.h>
-#include <BMP388_DEV.h>
-#include <TinyGPS++.h> //for built-in UC6580 GNSS on the Heltec Wireless Tracker
-#include <RadioLib.h>
-#include "Buzzer.h" //buzzer tone functions - this was first built for aruduino Nano boards, could be updated for ESP32.
-#include "Control.h" //deployment logic etc.
-#include "TFT/TFTscreen.h" //for built-in TFT screen on the Heltec Wireless Tracker
-#include "Config/Serial_Debug.h" //Serial monitor debugging messages
-#include "Config/Hardware_Config.h"
-#include "Config/Flight_Config.h"
-#include "Config/UC6580_Config.h" //Library for configuring the GPS sentences and output rates etc. Not finished yet, few things to work through yet,
-
-//SD pins
-const uint8_t SD_CS_PIN = 46;
-const uint8_t SOFT_MISO_PIN = 17;
-const uint8_t SOFT_MOSI_PIN = 15;
-const uint8_t SOFT_SCK_PIN = 16;
-SoftSpiDriver<SOFT_MISO_PIN, SOFT_MOSI_PIN, SOFT_SCK_PIN> softSpi;
+#include "Config/Common.h"
 
 //Global variables
 //float maxaccel, TTA; //max acceleration and time to apogee (TTA) not currently implemented
 float pressure, altitude, temperature, altioffset, correctedalt; //barometer variables
 float ax, ay, az, gx, gy, gz, mx, my, mz, hrax, hray, hraz; //accelerometer, gyro, magnetometer variables
+float roll, pitch, yaw, heading, azimuth, zenith;
 float maxalt = 0;
 float lastLatitude = 0.0;
 float lastLongitude = 0.0;
@@ -35,9 +13,6 @@ float GPSalt = 0.0;
 float satsfound = 0.0;
 unsigned long lastGPSUpdate = 0;
 unsigned long buttonPressTime = 0; // Track button press duration
-byte droguecount = 0;
-byte maincount = 0;
-byte logtimeout = 0;
 unsigned long timer, LEDtimer, radiotimer, flushclock, batteryclock, apogeetime, liftofftime, timetoapogee; //various timers. some of these yet not implemented
 bool bmpready = false; //flag for barometer data collected
 bool GPSready = false;
@@ -48,6 +23,9 @@ int logNumber = 0; //file numbering
 int msgID = 1000;
 int logtime = 4; //set a minimum logging interval in ms.
 const uint8_t rowMarker[4] = {0xFF, 0xFE, 0xFD, 0xFC};  // Unique row marker
+byte droguecount = 0;
+byte maincount = 0;
+byte logtimeout = 0;
 String dataToSend = "";
 String msgstring = "";
 String latstring = "";
@@ -59,6 +37,12 @@ void commsTask(void *parameter);
 void loggingTask(void *parameter);
 void events(int state);
 
+//SD pins
+const uint8_t SD_CS_PIN = 46;
+const uint8_t SOFT_MISO_PIN = 17;
+const uint8_t SOFT_MOSI_PIN = 15;
+const uint8_t SOFT_SCK_PIN = 16;
+
 //The rest
 TaskHandle_t commsTaskHandle = NULL;
 TaskHandle_t loggingTaskHandle = NULL;
@@ -69,12 +53,17 @@ Adafruit_ICM20948 icm;
 TFTscreen screen;
 TinyGPSPlus GPS;
 SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RESET, LORA_DIO2);
+SoftSpiDriver<SOFT_MISO_PIN, SOFT_MOSI_PIN, SOFT_SCK_PIN> softSpi;
 SdFat SD;
 SdFile logfile;
 Buzzer Buzz(45);
 Control ControlInstance(droguepin, mainpin, lockout, events); //set pins to trigger ejection chargers, safety lockout altitude (so ejection charges don't accidentally go off at ground level) and what function to callback to on state change
 Serial_Debug Debug(115200);
 UCCONFIG UC6580;
+Adafruit_Madgwick AHRSfilter;
+Kalman accelFilterX(0.5, 2.0, 1, 0);
+Kalman accelFilterY(0.5, 2.0, 1, 0);
+Kalman accelFilterZ(0.5, 2.0, 1, 0);
 
 void setup() {
 /****************************************/
@@ -191,6 +180,7 @@ void setup() {
   icm.setAccelRange(ICM20948_ACCEL_RANGE_16_G);
   icm.setGyroRange(ICM20948_GYRO_RANGE_2000_DPS);
   icm.setMagDataRate(AK09916_MAG_DATARATE_100_HZ);
+  AHRSfilter.begin(50);
   digitalWrite(LEDpin, LOW); // onboard LED Off
   screen.write_str(105, 52, " OK!", Font_Small, GREEN, BLACK);
   delay(75);
@@ -237,10 +227,14 @@ if(!adxl.begin()) {
   snprintf(filename, sizeof(filename), "FltLog%d.csv", logNumber);
   logfile.open(filename, O_WRITE | O_CREAT);
   delay(250); // Issues seem to happen without this short delay.
+  
   logfile.println("~ HELTEC LOGGER v1.0 ~");
-  logfile.println("~ Last compiled: 21-02-25 ~");
+  logfile.println("~ Last compiled: 03-10-25 ~");
   logfile.println();
-  logfile.println("ms,ax,ay,az,gx,gy,gz,mx,my,mz,hrax,hray,hraz,pres,alt,rel. alt,GPSalt,lat,long,");
+  logfile.print("Last reset code: ");
+  logfile.println(esp_reset_reason());
+  logfile.println();
+  logfile.println("ms,ax,ay,az,gx,gy,gz,mx,my,mz,hrax,hray,hraz,pres,alt,rel. alt,azimuth,zenith,GPSalt,lat,long,");
   logfile.sync();
   Debug.debugSD(2);
   digitalWrite(LEDpin, LOW); // onboard LED off
@@ -298,29 +292,34 @@ void readsensors (void) {
   timer = millis();
   sensors_event_t a, g, temp, m;
   icm.getEvent(&a, &g, &temp, &m);
-  ax = (round(a.acceleration.x * 100) / 100) - 0.19;
-  ay = (round(a.acceleration.y * 100) / 100) + 0.04;
-  az = (round(a.acceleration.z * 100) / 100) + 0.01;
-  gx = (round(g.gyro.x * 100) / 100) + 0;
-  gy = (round(g.gyro.y * 100) / 100) + 0.01;
-  gz = (round(g.gyro.z * 100) / 100) + 0;
-  mx = (round(m.magnetic.x * 100) / 100) + 0;
+  ax = (round(a.acceleration.z * 100) / 100) - 0.33;
+  ay = (round(a.acceleration.y * 100) / 100) + 0;
+  az = (round(a.acceleration.x * 100) / 100) - 0.15;
+  gx = (round(g.gyro.z * 100) / 100) + 0;
+  gy = (round(g.gyro.y * 100) / 100) - 0.01;
+  gz = (round(g.gyro.x * 100) / 100) + 0;
+  mx = (round(m.magnetic.z * 100) / 100) + 0;
   my = (round(m.magnetic.y * 100) / 100) + 0;
-  mz = (round(m.magnetic.z * 100) / 100) + 0;
+  mz = (round(m.magnetic.x * 100) / 100) + 0;
 
   sensors_event_t event;
   adxl.getEvent(&event);
-  hrax = (round(event.acceleration.x * 100) / 100) - 11.57;
-  hray = (round(event.acceleration.y * 100) / 100) - 11.94;
-  hraz = (round(event.acceleration.z * 100) / 100) + 4.32;
+  hrax = accelFilterX.update(event.acceleration.z + 5.22);
+  hray = accelFilterY.update(event.acceleration.y - 12.15);
+  hraz = accelFilterZ.update(event.acceleration.x - 11.74);
 
   if (bmp.getMeasurements(temperature, pressure, altitude)){
    pressure = round(pressure * 100) / 100; 
    altitude = round(altitude *100) / 100;   
    correctedalt = altitude - altioffset;
-     ControlInstance.Deployment(correctedalt, az); //although not currently implemented in the ControlInstance library, function it set up to accept it so that it can be implemented in future, e.g detecting lift-off, recording maxx acceleration during boost, etc
-     bmpready = true; //sets flag to say that there is some baro data to be written
-     }
+   ControlInstance.Deployment(correctedalt, az); //although not currently implemented in the ControlInstance library, function it set up to accept it so that it can be implemented in future, e.g detecting lift-off, recording maxx acceleration during boost, etc
+   bmpready = true; //sets flag to say that there is some baro data to be written
+   //AHRSfilter.update(gx, gy, gz, ax, ay, az, mx, my, mz);
+   //roll = AHRSfilter.getRoll();
+   //pitch = AHRSfilter.getPitch();
+   //heading = AHRSfilter.getYaw(); // Yaw = compass heading = azimuth
+   //zenith = 90.0 - pitch;   
+   }
 }
 
 /****************************************/
@@ -371,10 +370,10 @@ void endlog (void) {
 /****************************************/
 void events (int state) {
   switch (state){
-    case 0: COMMA; logfile.println("armed"); logfile.sync(); break;
-    case 1: COMMA; logfile.println("drogue fired"); logfile.sync(); break;
-    case 2: COMMA; logfile.println("main fired"); logfile.sync(); break;
-    case 3: COMMA; logfile.println("disarmed"); logfile.sync(); break;
+    case 0: COMMA; logfile.print("armed"); logfile.sync(); break;
+    case 1: COMMA; logfile.print("drogue fired"); logfile.sync(); break;
+    case 2: COMMA; logfile.print("main fired"); logfile.sync(); break;
+    case 3: COMMA; logfile.print("disarmed"); logfile.sync(); break;
     default: break; //nothing to do here for states 4 and 5.
     }
 }
@@ -434,9 +433,10 @@ void loggingTask(void *parameter) {
             COMMA;
             logfile.print(pressure); COMMA;
             logfile.print(altitude); COMMA;
-            logfile.print(correctedalt);
+            logfile.print(correctedalt);// COMMA;
+            //logfile.print(heading); COMMA;
+            //logfile.print(zenith);
             bmpready = false; //set the flag back until the next baro data is collected
-
             if (GPSready){ //if we're printing BMP data, check for GPS data and whack it on the end too
                COMMA;
                logfile.print(lastLatitude); COMMA;
@@ -447,7 +447,6 @@ void loggingTask(void *parameter) {
             Debug.debugdata(timer, pressure, altitude, correctedalt, ax, ay, az, gx, gy, gz, mx, my, mz, ControlInstance.controlstate);
             #endif
             }
-
 
          //do this stuff only once per whatever flushtime is set to.
          if ((timer - flushclock >= flushtime)){

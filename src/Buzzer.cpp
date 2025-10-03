@@ -1,6 +1,6 @@
 #include <arduino.h>
 #include "Buzzer.h"
-#include "Flight_Config.h"
+#include "Config/Flight_Config.h"
 
 Buzzer::Buzzer(int pin)
 {

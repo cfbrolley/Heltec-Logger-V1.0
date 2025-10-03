@@ -5,7 +5,7 @@
 #include <arduino.h>
 
 //Dedicated i2c pins
-#define I2C_SDA                7 
+#define I2C_SDA                7
 #define I2C_SCL                6
 
 //Deployment trigger pins
@@ -22,7 +22,7 @@
 #define TFTpin                 21
 
 //GPS pins amd baud rate
-#define VGNSS_CTRL             3 
+#define VGNSS_CTRL             3
 #define GNSS_RX                33
 #define GNSS_TX                34
 #define GNSS_RST               35
@@ -41,16 +41,16 @@
 #define LORA_DIO3                    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 //LoRa config
-#define LORA_SYNC              0x34       
+#define LORA_SYNC              0x34
 #define LORA_BAND              915.0 // Adjust to your region (e.g., 433E6, 868E6, or 915E6)
 #define TX_OUTPUT_POWER        5     // dBm
 #define TX_VOLTAGE             1.6
 #define LORA_BANDWIDTH         125   // [0: 125 kHz,
 #define LORA_SPREAD_FACTOR     7     // [SF7..SF12]
-#define LORA_PREAMBLE          8       
+#define LORA_PREAMBLE          8
 #define LORA_CODING_RATE       5     // [1: 4/5, 2: 4/6, 3: 4/7, 4: 4/8]
 #define RX_TIMEOUT_VALUE       1000
-#define BUFFER_SIZE            64 
+#define BUFFER_SIZE            64
 #define BOARD_TCXO_WAKEUP_TIME 5
 
 //SD config

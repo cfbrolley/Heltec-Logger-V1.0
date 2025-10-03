@@ -21,7 +21,7 @@ class Control {
     float maxaccel = 0;
     float maxalt = 0;
 
-  private:
+    private:
     ControlCallback _callback;
     int _drogue;
     int _main; 

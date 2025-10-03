@@ -49,10 +49,10 @@ void Buzzer::running()
 
 void Buzzer::ended()
 {
- #ifndef mute 
- tone(_pin, 5000, 300);
- delay(500);
- tone(_pin, 5000, 300);
- delay(3000);
- #endif
+  #ifndef mute 
+  tone(_pin, 5000, 300);
+  delay(500);
+  tone(_pin, 5000, 300);
+  delay(3000);
+  #endif
 }

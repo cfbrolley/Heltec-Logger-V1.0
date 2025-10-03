@@ -12,93 +12,93 @@
 #include "TFTfonts.h"
 #include "Arduino.h"
 
-#define TFT_MADCTL_MY  0x80
-#define TFT_MADCTL_MX  0x40
-#define TFT_MADCTL_MV  0x20
-#define TFT_MADCTL_ML  0x10
-#define TFT_MADCTL_RGB 0x00
-#define TFT_MADCTL_BGR 0x08
-#define TFT_MADCTL_MH  0x04
+#define TFT_MADCTL_MY 		0x80
+#define TFT_MADCTL_MX 		0x40
+#define TFT_MADCTL_MV 		0x20
+#define TFT_MADCTL_ML 		0x10
+#define TFT_MADCTL_RGB 		0x00
+#define TFT_MADCTL_BGR 		0x08
+#define TFT_MADCTL_MH  		0x04
 
 /*** Pin definitions for Heltec Wireless Tracker v1.1 ***/
-#define TFT_CS_Pin        38
-#define TFT_REST_Pin      39
-#define TFT_DC_Pin        40
-#define TFT_SCLK_Pin      41
-#define TFT_MOSI_Pin      42
-#define TFT_LED_K_Pin     21
-#define TFT_VTFT_CTRL_Pin  3
+#define TFT_CS_Pin        	38
+#define TFT_REST_Pin      	39
+#define TFT_DC_Pin        	40
+#define TFT_SCLK_Pin      	41
+#define TFT_MOSI_Pin      	42
+#define TFT_LED_K_Pin     	21
+#define TFT_VTFT_CTRL_Pin  	3
 
 
 // mini 160x80, rotate left
 
-#define TFT_IS_160X80 1
-#define TFT_XSTART 1
-#define TFT_YSTART 26
-#define TFTWIDTH  160
-#define TFTHEIGHT 80
+#define TFT_IS_160X80 		1
+#define TFT_XSTART 			1
+#define TFT_YSTART 			26
+#define TFTWIDTH  			160
+#define TFTHEIGHT 			80
 #define TFTROTATION (TFT_MADCTL_MY | TFT_MADCTL_MV | TFT_MADCTL_BGR)
 
 
 
 /****************************/
 
-#define TFT_NOP     0x00
-#define TFT_SWRESET 0x01
-#define TFT_RDDID   0x04
-#define TFT_RDDST   0x09
+#define TFT_NOP     		0x00
+#define TFT_SWRESET 		0x01
+#define TFT_RDDID   		0x04
+#define TFT_RDDST   		0x09
 
-#define TFT_SLPIN   0x10
-#define TFT_SLPOUT  0x11
-#define TFT_PTLON   0x12
-#define TFT_NORON   0x13
+#define TFT_SLPIN   		0x10
+#define TFT_SLPOUT  		0x11
+#define TFT_PTLON   		0x12
+#define TFT_NORON   		0x13
 
-#define TFT_INVOFF  0x20
-#define TFT_INVON   0x21
-#define TFT_GAMSET  0x26
-#define TFT_DISPOFF 0x28
-#define TFT_DISPON  0x29
-#define TFT_CASET   0x2A
-#define TFT_RASET   0x2B
-#define TFT_RAMWR   0x2C
-#define TFT_RAMRD   0x2E
+#define TFT_INVOFF  		0x20
+#define TFT_INVON   		0x21
+#define TFT_GAMSET  		0x26
+#define TFT_DISPOFF 		0x28
+#define TFT_DISPON  		0x29
+#define TFT_CASET   		0x2A
+#define TFT_RASET   		0x2B
+#define TFT_RAMWR   		0x2C
+#define TFT_RAMRD   		0x2E
 
-#define TFT_PTLAR   0x30
-#define TFT_COLMOD  0x3A
-#define TFT_MADCTL  0x36
+#define TFT_PTLAR   		0x30
+#define TFT_COLMOD  		0x3A
+#define TFT_MADCTL  		0x36
 
-#define TFT_FRMCTR1 0xB1
-#define TFT_FRMCTR2 0xB2
-#define TFT_FRMCTR3 0xB3
-#define TFT_INVCTR  0xB4
-#define TFT_DISSET5 0xB6
+#define TFT_FRMCTR1 		0xB1
+#define TFT_FRMCTR2 		0xB2
+#define TFT_FRMCTR3 		0xB3
+#define TFT_INVCTR  		0xB4
+#define TFT_DISSET5 		0xB6
 
-#define TFT_PWCTR1  0xC0
-#define TFT_PWCTR2  0xC1
-#define TFT_PWCTR3  0xC2
-#define TFT_PWCTR4  0xC3
-#define TFT_PWCTR5  0xC4
-#define TFT_VMCTR1  0xC5
+#define TFT_PWCTR1  		0xC0
+#define TFT_PWCTR2  		0xC1
+#define TFT_PWCTR3  		0xC2
+#define TFT_PWCTR4  		0xC3
+#define TFT_PWCTR5  		0xC4
+#define TFT_VMCTR1  		0xC5
 
-#define TFT_RDID1   0xDA
-#define TFT_RDID2   0xDB
-#define TFT_RDID3   0xDC
-#define TFT_RDID4   0xDD
+#define TFT_RDID1   		0xDA
+#define TFT_RDID2   		0xDB
+#define TFT_RDID3   		0xDC
+#define TFT_RDID4   		0xDD
 
-#define TFT_PWCTR6  0xFC
+#define TFT_PWCTR6  		0xFC
 
-#define TFT_GMCTRP1 0xE0
-#define TFT_GMCTRN1 0xE1
+#define TFT_GMCTRP1 		0xE0
+#define TFT_GMCTRN1 		0xE1
 
 // Color definitions
-#define	BLACK   0x0000
-#define	BLUE    0x001F
-#define	RED     0xF800
-#define	GREEN   0x07E0
-#define CYAN    0x07FF
-#define MAGENTA 0xF81F
-#define YELLOW  0xFFE0
-#define WHITE   0xFFFF
+#define	BLACK   			0x0000
+#define	BLUE    			0x001F
+#define	RED     			0xF800
+#define	GREEN   			0x07E0
+#define CYAN    			0x07FF
+#define MAGENTA 			0xF81F
+#define YELLOW  			0xFFE0
+#define WHITE   			0xFFFF
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
 
 typedef enum {
